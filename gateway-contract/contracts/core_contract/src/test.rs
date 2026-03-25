@@ -40,7 +40,10 @@ fn test_resolve_returns_none_when_no_memo() {
     let hash = commitment(&env, 0);
     let new_root = BytesN::from_array(&env, &[2u8; 32]);
 
-    let signals = PublicSignals { old_root: root, new_root };
+    let signals = PublicSignals {
+        old_root: root,
+        new_root,
+    };
     client.register_resolver(&caller, &hash, &dummy_proof(&env), &signals);
 
     let (resolved_wallet, memo) = client.resolve(&hash);
@@ -57,7 +60,10 @@ fn test_set_memo_and_resolve_flow() {
     let hash = commitment(&env, 0);
     let new_root = BytesN::from_array(&env, &[2u8; 32]);
 
-    let signals = PublicSignals { old_root: root, new_root };
+    let signals = PublicSignals {
+        old_root: root,
+        new_root,
+    };
     client.register_resolver(&caller, &hash, &dummy_proof(&env), &signals);
     client.set_memo(&hash, &4242u64);
 
@@ -194,7 +200,10 @@ fn test_register_resolver_duplicate_commitment_fails() {
     let hash = commitment(&env, 22);
     let new_root = BytesN::from_array(&env, &[2u8; 32]);
 
-    let signals_first = PublicSignals { old_root: root, new_root: new_root.clone() };
+    let signals_first = PublicSignals {
+        old_root: root,
+        new_root: new_root.clone(),
+    };
     client.register_resolver(&caller, &hash, &dummy_proof(&env), &signals_first);
 
     let signals_second = PublicSignals {
@@ -213,7 +222,10 @@ fn test_register_resolver_success_updates_root() {
     let hash = commitment(&env, 23);
     let new_root = BytesN::from_array(&env, &[2u8; 32]);
 
-    let signals = PublicSignals { old_root: root, new_root: new_root.clone() };
+    let signals = PublicSignals {
+        old_root: root,
+        new_root: new_root.clone(),
+    };
     client.register_resolver(&caller, &hash, &dummy_proof(&env), &signals);
 
     assert_eq!(client.get_smt_root(), new_root);
@@ -236,7 +248,10 @@ fn test_register_resolver_emits_events() {
     let hash = commitment(&env, 24);
     let new_root = BytesN::from_array(&env, &[2u8; 32]);
     let proof = dummy_proof(&env);
-    let signals = PublicSignals { old_root: root.clone(), new_root: new_root.clone() };
+    let signals = PublicSignals {
+        old_root: root.clone(),
+        new_root: new_root.clone(),
+    };
 
     env.as_contract(&contract_id, || {
         use soroban_sdk::panic_with_error;
@@ -251,7 +266,10 @@ fn test_register_resolver_emits_events() {
         assert!(ZkVerifier::verify_groth16_proof(&env, &proof, &signals));
         env.storage().persistent().set(
             &key,
-            &crate::types::ResolveData { wallet: caller.clone(), memo: None },
+            &crate::types::ResolveData {
+                wallet: caller.clone(),
+                memo: None,
+            },
         );
         SmtRoot::update_root(&env, signals.new_root.clone());
         #[allow(deprecated)]
@@ -262,7 +280,11 @@ fn test_register_resolver_emits_events() {
     });
 
     let events = env.events().all();
-    assert_eq!(events.len(), 2, "ROOT_UPD and REGISTER events must both be emitted");
+    assert_eq!(
+        events.len(),
+        2,
+        "ROOT_UPD and REGISTER events must both be emitted"
+    );
 }
 
 // ── SMT root tests ────────────────────────────────────────────────────────────
@@ -352,7 +374,10 @@ fn test_add_bitcoin_address_success() {
     let addr = bitcoin_address(&env);
     client.register(&owner, &hash);
     client.add_chain_address(&owner, &hash, &ChainType::Bitcoin, &addr);
-    assert_eq!(client.get_chain_address(&hash, &ChainType::Bitcoin), Some(addr));
+    assert_eq!(
+        client.get_chain_address(&hash, &ChainType::Bitcoin),
+        Some(addr)
+    );
 }
 
 #[test]
@@ -365,7 +390,10 @@ fn test_add_solana_address_success() {
     let addr = solana_address(&env);
     client.register(&owner, &hash);
     client.add_chain_address(&owner, &hash, &ChainType::Solana, &addr);
-    assert_eq!(client.get_chain_address(&hash, &ChainType::Solana), Some(addr));
+    assert_eq!(
+        client.get_chain_address(&hash, &ChainType::Solana),
+        Some(addr)
+    );
 }
 
 #[test]
@@ -378,7 +406,10 @@ fn test_add_cosmos_address_success() {
     let addr = cosmos_address(&env);
     client.register(&owner, &hash);
     client.add_chain_address(&owner, &hash, &ChainType::Cosmos, &addr);
-    assert_eq!(client.get_chain_address(&hash, &ChainType::Cosmos), Some(addr));
+    assert_eq!(
+        client.get_chain_address(&hash, &ChainType::Cosmos),
+        Some(addr)
+    );
 }
 
 #[test]
@@ -456,7 +487,12 @@ fn test_invalid_evm_address_wrong_length_panics() {
     let owner = Address::generate(&env);
     let hash = commitment(&env, 10);
     client.register(&owner, &hash);
-    client.add_chain_address(&owner, &hash, &ChainType::Evm, &Bytes::from_slice(&env, b"0x1234567"));
+    client.add_chain_address(
+        &owner,
+        &hash,
+        &ChainType::Evm,
+        &Bytes::from_slice(&env, b"0x1234567"),
+    );
 }
 
 #[test]
@@ -468,7 +504,12 @@ fn test_invalid_evm_address_no_prefix_panics() {
     let owner = Address::generate(&env);
     let hash = commitment(&env, 11);
     client.register(&owner, &hash);
-    client.add_chain_address(&owner, &hash, &ChainType::Evm, &Bytes::from_slice(&env, b"aAbBcCdDeEfF00112233445566778899aAbBcCdDeE"));
+    client.add_chain_address(
+        &owner,
+        &hash,
+        &ChainType::Evm,
+        &Bytes::from_slice(&env, b"aAbBcCdDeEfF00112233445566778899aAbBcCdDeE"),
+    );
 }
 
 #[test]
@@ -480,7 +521,12 @@ fn test_invalid_solana_address_too_short_panics() {
     let owner = Address::generate(&env);
     let hash = commitment(&env, 12);
     client.register(&owner, &hash);
-    client.add_chain_address(&owner, &hash, &ChainType::Solana, &Bytes::from_slice(&env, b"short1234"));
+    client.add_chain_address(
+        &owner,
+        &hash,
+        &ChainType::Solana,
+        &Bytes::from_slice(&env, b"short1234"),
+    );
 }
 
 #[test]
@@ -492,5 +538,10 @@ fn test_invalid_cosmos_address_too_short_panics() {
     let owner = Address::generate(&env);
     let hash = commitment(&env, 13);
     client.register(&owner, &hash);
-    client.add_chain_address(&owner, &hash, &ChainType::Cosmos, &Bytes::from_slice(&env, b"cosmos123"));
+    client.add_chain_address(
+        &owner,
+        &hash,
+        &ChainType::Cosmos,
+        &Bytes::from_slice(&env, b"cosmos123"),
+    );
 }

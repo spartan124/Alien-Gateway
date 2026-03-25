@@ -85,9 +85,7 @@ impl AddressManager {
         let len = address.len();
         match chain {
             ChainType::Evm => {
-                len == 42
-                    && address.get(0) == Some(0x30)
-                    && address.get(1) == Some(0x78)
+                len == 42 && address.get(0) == Some(0x30) && address.get(1) == Some(0x78)
             }
             ChainType::Bitcoin => (25..=62).contains(&len),
             ChainType::Solana => (32..=44).contains(&len),
