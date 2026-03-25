@@ -1,5 +1,5 @@
 use crate::types::{AuctionStatus, DataKey};
-use soroban_sdk::{u128, Address, Env};
+use soroban_sdk::{Address, Env};
 
 pub fn get_status(env: &Env) -> AuctionStatus {
     env.storage()

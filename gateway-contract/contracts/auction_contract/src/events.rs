@@ -30,8 +30,8 @@ pub struct BidPlacedEvent {
 pub struct AuctionClosedEvent {
     #[topic]
     pub username_hash: BytesN<32>,
-    pub winner: Address,
-    pub winning_bid: i128,
+    pub winner: Option<Address>,
+    pub winning_bid: u128,
 }
 
 #[contractevent]
@@ -44,13 +44,6 @@ pub struct UsernameClaimedEvent {
 
 #[contractevent]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuctionClosedEvent {
-    #[topic]
-    pub username_hash: BytesN<32>,
-    pub winner: Option<Address>,
-    pub winning_bid: u128,
-}
-
 pub struct BidRefundedEvent {
     #[topic]
     pub username_hash: BytesN<32>,
