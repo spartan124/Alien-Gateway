@@ -8,7 +8,7 @@ use escrow_contract::types::{
     AutoPay, ScheduledPayment as EscrowScheduledPayment, VaultConfig, VaultState,
 };
 use soroban_sdk::testutils::{Address as _, Events, MockAuth, MockAuthInvoke};
-use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env, IntoVal, Symbol};
+use soroban_sdk::{contracttype, Address, Bytes, BytesN, Env, IntoVal, Symbol, Val, Vec};
 
 fn setup(env: &Env) -> (Address, ContractClient<'_>) {
     let contract_id = env.register(Contract, ());
@@ -317,7 +317,7 @@ fn test_set_privacy_mode_non_owner_rejected() {
             .set(&RegistrationKey::Commitment(hash.clone()), &owner);
     });
 
-    let args = (hash.clone(), PrivacyMode::Shielded).into_val(&env);
+    let args: Vec<Val> = (hash.clone(), PrivacyMode::Shielded).into_val(&env);
     env.mock_auths(&[MockAuth {
         address: &attacker,
         invoke: &MockAuthInvoke {
