@@ -437,7 +437,6 @@ fn test_create_vault_non_owner_panics() {
     // create_vault calls owner.require_auth() → panics because no auth is mocked.
     client.create_vault(&commitment, &token);
 }
-
 // ─────────────────────────────────────────────────────────────────────────────
 // TEST #5: Vault Creation Event Emission
 // ─────────────────────────────────────────────────────────────────────────────
@@ -449,22 +448,28 @@ fn test_create_vault_emits_vault_crt_event() {
 
     let (client, escrow_id, _owner, token, commitment) = setup_with_registration(&env, 0xDD);
 
+    // Record events before create_vault call
+    let events_before = env.events().all();
+    let escrow_events_before = events_before
+        .iter()
+        .filter(|(event_contract, _, _)| event_contract == &escrow_id)
+        .count();
+
+    // Call create_vault
     client.create_vault(&commitment, &token);
 
-    // Verify event was published
-    let events = env.events().all();
+    // Record events after create_vault call
+    let events_after = env.events().all();
+    let escrow_events_after = events_after
+        .iter()
+        .filter(|(event_contract, _, _)| event_contract == &escrow_id)
+        .count();
 
-    // Filter for events from the escrow contract
-    let mut escrow_event_count = 0;
-    for (event_contract, _, _) in events.iter() {
-        if event_contract == escrow_id {
-            escrow_event_count += 1;
-        }
-    }
-
-    assert!(
-        escrow_event_count > 0,
-        "At least one event should be emitted from escrow contract"
+    // Verify new event was emitted by create_vault
+    let new_events_emitted = escrow_events_after - escrow_events_before;
+    assert_eq!(
+        new_events_emitted, 1,
+        "create_vault should emit exactly one escrow event (VaultCrtEvent)"
     );
 }
 
