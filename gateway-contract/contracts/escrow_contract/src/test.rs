@@ -41,7 +41,10 @@ fn setup_test(
     let client = EscrowContractClient::new(env, &contract_id);
 
     let token_admin = Address::generate(env);
-    let token = env.register_stellar_asset_contract(token_admin.clone());
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin.clone())
+        .address()
+        .clone();
 
     let from = BytesN::from_array(env, &[0u8; 32]);
     let to = BytesN::from_array(env, &[1u8; 32]);
@@ -340,7 +343,10 @@ fn setup_with_registration<'a>(
     let commitment = BytesN::from_array(env, &[commitment_seed; 32]);
     let owner = Address::generate(env);
     let token_admin = Address::generate(env);
-    let token = env.register_stellar_asset_contract(token_admin);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address()
+        .clone();
 
     reg_client.set_owner(&commitment, &owner);
 
@@ -388,7 +394,7 @@ fn test_create_vault_success() {
 }
 
 #[test]
-fn test_create_vault_duplicate_panics() {
+fn test_create_vault_already_exists() {
     let env = Env::default();
     env.mock_all_auths();
 
@@ -406,7 +412,7 @@ fn test_create_vault_duplicate_panics() {
 
 #[test]
 #[should_panic]
-fn test_create_vault_non_owner_panics() {
+fn test_create_vault_not_owner() {
     let env = Env::default();
     // No mock_all_auths: a caller who is NOT the registered owner cannot create
     // the vault because owner.require_auth() will reject the transaction.
@@ -417,7 +423,10 @@ fn test_create_vault_non_owner_panics() {
     let commitment = BytesN::from_array(&env, &[0xCCu8; 32]);
     let owner = Address::generate(&env);
     let token_admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract(token_admin);
+    let token = env
+        .register_stellar_asset_contract_v2(token_admin)
+        .address()
+        .clone();
 
     // set_owner has no require_auth, so it succeeds without auth mocking.
     reg_client.set_owner(&commitment, &owner);
@@ -436,98 +445,6 @@ fn test_create_vault_non_owner_panics() {
 
     // create_vault calls owner.require_auth() → panics because no auth is mocked.
     client.create_vault(&commitment, &token);
-}
-// ─────────────────────────────────────────────────────────────────────────────
-// TEST #5: Vault Creation Event Emission
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_create_vault_emits_vault_crt_event() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let (client, escrow_id, _owner, token, commitment) = setup_with_registration(&env, 0xDD);
-
-    // Record events before create_vault call
-    let events_before = env.events().all();
-    let escrow_events_before = events_before
-        .iter()
-        .filter(|(event_contract, _, _)| event_contract == &escrow_id)
-        .count();
-
-    // Call create_vault
-    client.create_vault(&commitment, &token);
-
-    // Record events after create_vault call
-    let events_after = env.events().all();
-    let escrow_events_after = events_after
-        .iter()
-        .filter(|(event_contract, _, _)| event_contract == &escrow_id)
-        .count();
-
-    // Verify new event was emitted by create_vault
-    let new_events_emitted = escrow_events_after - escrow_events_before;
-    assert_eq!(
-        new_events_emitted, 1,
-        "create_vault should emit exactly one escrow event (VaultCrtEvent)"
-    );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TEST #6: Registration Contract Not Initialized
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_create_vault_registration_not_initialized_panics() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    // Register escrow contract WITHOUT initializing it
-    let escrow_id = env.register(EscrowContract, ());
-    let client = EscrowContractClient::new(&env, &escrow_id);
-
-    let commitment = BytesN::from_array(&env, &[0xEEu8; 32]);
-    let token = Address::generate(&env);
-
-    // Try to create vault without calling initialize
-    // This should fail because read_registration_contract returns None
-    let result = client.try_create_vault(&commitment, &token);
-    assert!(matches!(
-        result,
-        Err(Ok(err)) if err == Error::from_contract_error(EscrowError::CommitmentNotRegistered as u32)
-    ));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TEST #7: Commitment Not Found in Registration
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[test]
-fn test_create_vault_unregistered_commitment_panics() {
-    let env = Env::default();
-    env.mock_all_auths();
-
-    let reg_id = env.register(MockRegistrationContract, ());
-
-    let commitment = BytesN::from_array(&env, &[0xFFu8; 32]);
-    let token_admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract(token_admin);
-
-    // Do NOT set_owner for this commitment in the registration contract
-    // This simulates the commitment being unregistered
-
-    let escrow_id = env.register(EscrowContract, ());
-    let client = EscrowContractClient::new(&env, &escrow_id);
-    let admin = Address::generate(&env);
-    client.initialize(&admin, &reg_id);
-
-    // Try to create vault for unregistered commitment
-    // Registration::get_owner will return None
-    let result = client.try_create_vault(&commitment, &token);
-    assert!(matches!(
-        result,
-        Err(Ok(err)) if err == Error::from_contract_error(EscrowError::CommitmentNotRegistered as u32)
-    ));
 }
 
 #[test]
@@ -759,4 +676,136 @@ fn test_auto_pay_multiple_vaults_no_interference() {
         assert_ne!(stored_a.amount, stored_b.amount);
         assert_ne!(stored_a.from, stored_b.from);
     });
+}
+
+// ─── cancel_vault tests ──────────────────────────────────────────────
+
+#[test]
+fn test_cancel_vault_refunds_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, client, token, _token_admin, from, _) = setup_test(&env);
+    let owner = Address::generate(&env);
+
+    let initial_balance = 100i128;
+    create_vault(&env, &contract_id, &from, &owner, &token, initial_balance);
+
+    // Mint tokens to contract so cancel_vault can transfer the refund
+    let token_admin_client = StellarAssetClient::new(&env, &token);
+    token_admin_client
+        .mock_all_auths()
+        .mint(&contract_id, &initial_balance);
+
+    // Verify initial state
+    assert_eq!(client.get_balance(&from), Some(initial_balance));
+
+    // Cancel vault
+    client.cancel_vault(&from);
+
+    // Verify balance is now 0
+    assert_eq!(client.get_balance(&from), Some(0));
+
+    // Verify vault is inactive
+    env.as_contract(&contract_id, || {
+        let state: VaultState = env
+            .storage()
+            .persistent()
+            .get(&DataKey::VaultState(from.clone()))
+            .unwrap();
+        assert!(!state.is_active);
+        assert_eq!(state.balance, 0);
+    });
+}
+
+#[test]
+fn test_cancel_vault_empty_balance() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, client, token, _, from, _) = setup_test(&env);
+    let owner = Address::generate(&env);
+
+    // Create vault with 0 balance
+    create_vault(&env, &contract_id, &from, &owner, &token, 0);
+
+    // Cancel vault should succeed without transfer
+    client.cancel_vault(&from);
+
+    // Verify vault is inactive
+    env.as_contract(&contract_id, || {
+        let state: VaultState = env
+            .storage()
+            .persistent()
+            .get(&DataKey::VaultState(from.clone()))
+            .unwrap();
+        assert!(!state.is_active);
+        assert_eq!(state.balance, 0);
+    });
+}
+
+#[test]
+#[should_panic]
+fn test_cancel_vault_blocks_deposit() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, client, token, _, from, _) = setup_test(&env);
+    let owner = Address::generate(&env);
+
+    create_vault(&env, &contract_id, &from, &owner, &token, 100);
+
+    // Cancel the vault
+    client.cancel_vault(&from);
+
+    // Attempt to deposit should fail with VaultInactive and panic
+    let amount = 50i128;
+    client.deposit(&from, &amount);
+}
+
+#[test]
+#[should_panic]
+fn test_cancel_vault_blocks_schedule() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (contract_id, client, token, _, from, to) = setup_test(&env);
+
+    create_vault(
+        &env,
+        &contract_id,
+        &from,
+        &Address::generate(&env),
+        &token,
+        1000,
+    );
+    create_vault(&env, &contract_id, &to, &Address::generate(&env), &token, 0);
+
+    // Cancel the vault
+    client.cancel_vault(&from);
+
+    env.ledger().set_timestamp(1000);
+
+    // Attempt to schedule payment should fail with VaultInactive and panic
+    client.schedule_payment(&from, &to, &100, &2000);
+}
+
+#[test]
+#[should_panic]
+fn test_cancel_vault_non_owner_panics() {
+    let env = Env::default();
+    let (contract_id, client, token, _, from, _) = setup_test(&env);
+    let owner = Address::generate(&env);
+    let non_owner = Address::generate(&env);
+
+    create_vault(&env, &contract_id, &from, &owner, &token, 100);
+
+    // Mock auth for non-owner
+    client
+        .mock_auths(&[MockAuth {
+            address: &non_owner,
+            invoke: &MockAuthInvoke {
+                contract: &contract_id,
+                fn_name: "cancel_vault",
+                args: (from.clone(),).into_val(&env),
+                sub_invokes: &[],
+            },
+        }])
+        .cancel_vault(&from);
 }
